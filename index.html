@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GenBI Football Match Analyst</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 100px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 2rem;
+    }
+
+    p {
+      color: #4b5563;
+      line-height: 1.5;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      margin: 12px 0 16px;
+      display: block;
+      padding: 12px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    button {
+      background: #0f766e;
+      color: white;
+      border: none;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 14px;
+      color: #374151;
+    }
+
+    .result {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .panel {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .panel-title {
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #111827;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .examples {
+      margin-top: 16px;
+      font-size: 14px;
+      color: #4b5563;
+    }
+
+    .examples span {
+      display: inline-block;
+      background: #ecfeff;
+      color: #115e59;
+      border: 1px solid #99f6e4;
+      border-radius: 999px;
+      padding: 6px 10px;
+      margin: 6px 6px 0 0;
+    }
+
+    .credit-badge {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(17, 24, 39, 0.92);
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 999px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 1000;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .credit-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+      background: rgba(15, 118, 110, 0.96);
+    }
+
+    .linkedin-icon {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+    }
+
+    @media (max-width: 768px) {
+      .result {
+        grid-template-columns: 1fr;
+      }
+
+      .credit-badge {
+        right: 12px;
+        bottom: 12px;
+        font-size: 12px;
+        padding: 9px 12px;
+      }
+
+      .linkedin-icon {
+        width: 16px;
+        height: 16px;
+        flex-basis: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <div class="card">
+      <h1>GenBI Football Match Analyst</h1>
+      <p>
+        Ask questions about football match data powered by DuckDB and AI. You can query match trends, team performance, weekly patterns, and request charts when needed.
+      </p>
+
+      <label for="questionInput">Ask a football data question</label>
+      <input
+        id="questionInput"
+        type="text"
+        placeholder="Example: Which team scored the most goals last season?"
+      />
+
+      <button id="runBtn">Run analysis</button>
+      <div id="status" class="status"></div>
+
+      <div class="examples">
+        <span>Top scoring teams</span>
+        <span>Weekly goal trends</span>
+        <span>Home vs away performance</span>
+        <span>Show a chart of goals by week</span>
+      </div>
+
+      <div id="resultBox" class="result hidden">
+        <div class="panel">
+          <div class="panel-title">Question</div>
+          <pre id="questionView"></pre>
+        </div>
+        <div class="panel">
+          <div id="resultTitle" class="panel-title">Analysis</div>
+          <pre id="output"></pre>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <a
+    class="credit-badge"
+    href="https://www.linkedin.com/in/sid-raghunathan-85b59975/"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="Sid Raghunathan LinkedIn profile"
+  >
+    <span>Created by Sid Raghunathan</span>
+    <svg
+      class="linkedin-icon"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        fill="currentColor"
+        d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.063 2.063 0 1 1 0-4.126 2.063 2.063 0 0 1 0 4.126zM7.114 20.452H3.558V9h3.556v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"
+      />
+    </svg>
+  </a>
+
+  <script>
+    const questionInput = document.getElementById("questionInput");
+    const runBtn = document.getElementById("runBtn");
+    const statusEl = document.getElementById("status");
+    const resultBox = document.getElementById("resultBox");
+    const output = document.getElementById("output");
+    const questionView = document.getElementById("questionView");
+
+    runBtn.addEventListener("click", async () => {
+      const question = questionInput.value.trim();
+
+      if (!question) {
+        statusEl.textContent = "Please enter a question first.";
+        return;
+      }
+
+      runBtn.disabled = true;
+      statusEl.textContent = "Running analysis...";
+      resultBox.classList.add("hidden");
+      output.textContent = "";
+      questionView.textContent = "";
+
+      try {
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ question })
+        });
+
+        const rawText = await response.text();
+        let data;
+
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error(rawText || "Invalid server response");
+        }
+
+        if (!response.ok) {
+          throw new Error(data.detail || data.error || "Request failed");
+        }
+
+        questionView.textContent = question;
+        output.textContent = data.result || data.answer || "No result returned.";
+        resultBox.classList.remove("hidden");
+        statusEl.textContent = "Done.";
+      } catch (error) {
+        statusEl.textContent = "Error: " + error.message;
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
