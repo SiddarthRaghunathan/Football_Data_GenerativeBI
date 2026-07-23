@@ -13,17 +13,7 @@ from agno.tools.duckdb import DuckDbTools
 from agno.tools import Toolkit
 
 app = FastAPI()
-
-SHEET_ID = os.getenv("SHEET_ID")
-GID = os.getenv("GID", "0")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-if not SHEET_ID:
-    raise RuntimeError("Missing SHEET_ID env var")
-if not GOOGLE_API_KEY:
-    raise RuntimeError("Missing GOOGLE_API_KEY env var")
-
-os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+DB_PATH = "/tmp/genbi.duckdb"
 
 semantic_context = """
 Replace this with your real semantic_context string.
@@ -48,7 +38,6 @@ class ChartToolkit(Toolkit):
     ) -> dict:
         xs = [s.strip() for s in x_data.split(",") if s.strip()]
         ys = [float(s.strip()) for s in y_data.split(",") if s.strip()]
-
         return {
             "chart_type": chart_type,
             "title": title,
@@ -58,30 +47,45 @@ class ChartToolkit(Toolkit):
             "y_data": ys,
         }
 
+def get_env():
+    sheet_id = os.getenv("SHEET_ID")
+    gid = os.getenv("GID", "0")
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+
+    if not sheet_id:
+        raise RuntimeError("Missing SHEET_ID env var")
+    if not google_api_key:
+        raise RuntimeError("Missing GOOGLE_API_KEY env var")
+
+    os.environ["GOOGLE_API_KEY"] = google_api_key
+    return sheet_id, gid
+
 @lru_cache(maxsize=1)
 def setup_db():
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
+    sheet_id, gid = get_env()
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
     df = pd.read_csv(url)
 
-    con = duckdb.connect(":memory:")
+    con = duckdb.connect(DB_PATH)
     con.execute("CREATE OR REPLACE TABLE matches AS SELECT * FROM df")
-    return con
+    con.close()
+    return DB_PATH
 
 @lru_cache(maxsize=1)
 def build_agent():
-    con = setup_db()
+    db_path = setup_db()
 
-    agent = Agent(
+    return Agent(
         name="FootballMatchAnalyst",
         model=Gemini(id="gemma-4-31b-it"),
         tools=[
-            DuckDbTools(connection=con),
+            DuckDbTools(db_path=db_path, read_only=True),
             ChartToolkit(),
         ],
         instructions=[
             "You are a football match data analyst.",
             "The DuckDB database already contains a table called 'matches'. Never create or load new tables.",
-            "Use this semantic model as ground truth for column meanings:",
+            "Use this semantic model as ground truth for column meanings.",
             semantic_context,
             "Always write and run SQL against 'matches' to answer questions - never guess numbers.",
             "Only use the plot_chart tool when the user explicitly asks for a chart, graph, or visualization.",
@@ -92,7 +96,6 @@ def build_agent():
         ],
         markdown=True,
     )
-    return agent
 
 @app.get("/api/health")
 def health():
