@@ -1,0 +1,6 @@
+fastapi
+pydantic
+duckdb
+pandas
+agno
+google-genai
