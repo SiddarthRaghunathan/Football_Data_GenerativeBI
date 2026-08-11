@@ -47,8 +47,11 @@ notes:
   - Score, Corners, DangerousAttack are strings; use split_part() in SQL to parse.
 """
 
+
 class AskRequest(BaseModel):
     question: str
+    league: str  # required — one league must be selected
+
 
 class ChartToolkit(Toolkit):
     def __init__(self):
@@ -62,7 +65,7 @@ class ChartToolkit(Toolkit):
         x_label: str,
         y_label: str,
         x_data: str,
-        y_data: str
+        y_data: str,
     ) -> dict:
         xs = [s.strip() for s in x_data.split(",") if s.strip()]
         ys = [float(s.strip()) for s in y_data.split(",") if s.strip()]
@@ -98,12 +101,14 @@ class ChartToolkit(Toolkit):
             "y_data": ys,
         }
 
+
 def get_google_api_key():
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError("Missing GOOGLE_API_KEY env var")
     os.environ["GOOGLE_API_KEY"] = api_key
     return api_key
+
 
 @lru_cache(maxsize=1)
 def setup_db():
@@ -114,7 +119,7 @@ def setup_db():
 
     try:
         duckdb.close(DB_PATH)
-    except:
+    except Exception:
         pass
 
     con = duckdb.connect(DB_PATH)
@@ -123,6 +128,7 @@ def setup_db():
     con.close()
 
     return {"db_path": DB_PATH, "row_count": count}
+
 
 @lru_cache(maxsize=1)
 def build_agent():
@@ -133,45 +139,3 @@ def build_agent():
         model=Gemini(id="gemma-4-31b-it"),
         tools=[
             DuckDbTools(db_path=db_info["db_path"], read_only=True),
-            ChartToolkit(),
-        ],
-        instructions=[
-            "You are a football match data analyst.",
-            "The DuckDB database already contains a table called 'matches'. Never create or load new tables.",
-            "Use this semantic model as ground truth for column meanings:",
-            semantic_context,
-            "Always write and run SQL against 'matches' to answer questions — never guess numbers.",
-            "Only use the plot_chart tool when the user explicitly asks for a chart, graph, or visualization.",
-            "When the user asks for a chart, first run a SQL query to get the aggregated data, then call the plot_chart tool with the results.",
-            "Pass x_data and y_data as comma-separated strings.",
-            "For weekly grouping use: date_trunc('week', CAST(DateID AS DATE))",
-            "Give a concise plain-English answer and show the SQL you used.",
-        ],
-        markdown=True,
-    )
-    return agent
-
-@app.get("/api/health")
-def health():
-    try:
-        db_info = setup_db()
-        return {
-            "ok": True,
-            "rows": db_info["row_count"],
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/ask")
-def ask(req: AskRequest):
-    try:
-        agent = build_agent()
-        response = agent.run(req.question)
-        answer = getattr(response, "content", str(response))
-
-        return {
-            "question": req.question,
-            "answer": str(answer),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
