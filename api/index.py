@@ -47,11 +47,8 @@ notes:
   - Score, Corners, DangerousAttack are strings; use split_part() in SQL to parse.
 """
 
-
 class AskRequest(BaseModel):
     question: str
-    league: str  # required — exactly one league must be provided
-
 
 class ChartToolkit(Toolkit):
     def __init__(self):
@@ -65,7 +62,7 @@ class ChartToolkit(Toolkit):
         x_label: str,
         y_label: str,
         x_data: str,
-        y_data: str,
+        y_data: str
     ) -> dict:
         xs = [s.strip() for s in x_data.split(",") if s.strip()]
         ys = [float(s.strip()) for s in y_data.split(",") if s.strip()]
@@ -101,14 +98,12 @@ class ChartToolkit(Toolkit):
             "y_data": ys,
         }
 
-
 def get_google_api_key():
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError("Missing GOOGLE_API_KEY env var")
     os.environ["GOOGLE_API_KEY"] = api_key
     return api_key
-
 
 @lru_cache(maxsize=1)
 def setup_db():
@@ -117,10 +112,9 @@ def setup_db():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
     df = pd.read_csv(url)
 
-    # Best-effort: close any prior connections; some duckdb builds ignore this.
     try:
-        duckdb.close(DB_PATH)  # if this errors, we swallow it
-    except Exception:
+        duckdb.close(DB_PATH)
+    except:
         pass
 
     con = duckdb.connect(DB_PATH)
@@ -130,14 +124,13 @@ def setup_db():
 
     return {"db_path": DB_PATH, "row_count": count}
 
-
 @lru_cache(maxsize=1)
 def build_agent():
     db_info = setup_db()
 
     agent = Agent(
         name="FootballMatchAnalyst",
-        model=Gemini(id="gemma-4-31b-it"),  # swap to gemini-2.0-flash if needed
+        model=Gemini(id="gemma-4-31b-it"),
         tools=[
             DuckDbTools(db_path=db_info["db_path"], read_only=True),
             ChartToolkit(),
@@ -148,7 +141,6 @@ def build_agent():
             "Use this semantic model as ground truth for column meanings:",
             semantic_context,
             "Always write and run SQL against 'matches' to answer questions — never guess numbers.",
-            "Every question is scoped to a single league. You MUST apply the exact WHERE League filter provided in the question.",
             "Only use the plot_chart tool when the user explicitly asks for a chart, graph, or visualization.",
             "When the user asks for a chart, first run a SQL query to get the aggregated data, then call the plot_chart tool with the results.",
             "Pass x_data and y_data as comma-separated strings.",
@@ -158,7 +150,6 @@ def build_agent():
         markdown=True,
     )
     return agent
-
 
 @app.get("/api/health")
 def health():
@@ -171,57 +162,16 @@ def health():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.get("/api/leagues")
-def leagues():
-    try:
-        setup_db()
-        con = duckdb.connect(DB_PATH, read_only=True)
-        rows = con.execute(
-            "SELECT DISTINCT League FROM matches WHERE League IS NOT NULL ORDER BY League"
-        ).fetchall()
-        con.close()
-        return {"leagues": [r[0] for r in rows]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/api/ask")
 def ask(req: AskRequest):
     try:
-        setup_db()
-
-        # Validate the selected league exists (exact match)
-        con = duckdb.connect(DB_PATH, read_only=True)
-        valid = con.execute(
-            "SELECT DISTINCT League FROM matches WHERE League = ?",
-            [req.league],
-        ).fetchone()
-        con.close()
-
-        if not valid:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid league '{req.league}'. Select one from /api/leagues.",
-            )
-
         agent = build_agent()
-
-        scoped_question = (
-            f"{req.question}\n\n"
-            f"IMPORTANT: You MUST filter every SQL query with WHERE League = '{valid[0]}'. "
-            f"Do not query any other league."
-        )
-
-        response = agent.run(scoped_question)
+        response = agent.run(req.question)
         answer = getattr(response, "content", str(response))
 
         return {
             "question": req.question,
-            "league": valid[0],
             "answer": str(answer),
         }
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
