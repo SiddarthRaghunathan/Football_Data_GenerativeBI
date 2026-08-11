@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+import json
 
 from agno.agent import Agent
 from agno.models.google import Gemini
@@ -48,10 +50,9 @@ notes:
 """
 
 
-# CHANGED: added required league field
 class AskRequest(BaseModel):
     question: str
-    league: str
+    league: str  # required — exactly one league must be provided
 
 
 class ChartToolkit(Toolkit):
@@ -66,7 +67,7 @@ class ChartToolkit(Toolkit):
         x_label: str,
         y_label: str,
         x_data: str,
-        y_data: str
+        y_data: str,
     ) -> dict:
         xs = [s.strip() for s in x_data.split(",") if s.strip()]
         ys = [float(s.strip()) for s in y_data.split(",") if s.strip()]
@@ -148,7 +149,6 @@ def build_agent():
             "Use this semantic model as ground truth for column meanings:",
             semantic_context,
             "Always write and run SQL against 'matches' to answer questions — never guess numbers.",
-            # CHANGED: enforce league scoping at instruction level too
             "Every question is scoped to a single league. You MUST apply the exact WHERE League filter provided in the question.",
             "Only use the plot_chart tool when the user explicitly asks for a chart, graph, or visualization.",
             "When the user asks for a chart, first run a SQL query to get the aggregated data, then call the plot_chart tool with the results.",
@@ -173,7 +173,6 @@ def health():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# CHANGED: new endpoint to populate the league dropdown
 @app.get("/api/leagues")
 def leagues():
     try:
@@ -188,43 +187,9 @@ def leagues():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# CHANGED: league validation + prompt scoping
 @app.post("/api/ask")
 def ask(req: AskRequest):
     try:
         setup_db()
 
-        # Validate the selected league exists (exact match)
-        con = duckdb.connect(DB_PATH, read_only=True)
-        valid = con.execute(
-            "SELECT DISTINCT League FROM matches WHERE League = ?",
-            [req.league],
-        ).fetchone()
-        con.close()
-
-        if not valid:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid league '{req.league}'. Select one from /api/leagues.",
-            )
-
-        agent = build_agent()
-
-        scoped_question = (
-            f"{req.question}\n\n"
-            f"IMPORTANT: You MUST filter every SQL query with WHERE League = '{valid[0]}'. "
-            f"Do not query any other league."
-        )
-
-        response = agent.run(scoped_question)
-        answer = getattr(response, "content", str(response))
-
-        return {
-            "question": req.question,
-            "league": valid[0],
-            "answer": str(answer),
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Validate the selected league exists
