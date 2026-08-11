@@ -42,7 +42,8 @@
       margin-bottom: 8px;
     }
 
-    input[type="text"] {
+    input[type="text"],
+    select {
       width: 100%;
       margin: 12px 0 16px;
       display: block;
@@ -51,6 +52,14 @@
       border-radius: 10px;
       font-size: 16px;
       box-sizing: border-box;
+      background: white;
+    }
+
+    input[type="text"]:disabled,
+    select:disabled {
+      background: #f3f4f6;
+      color: #9ca3af;
+      cursor: not-allowed;
     }
 
     button {
@@ -177,14 +186,20 @@
     <div class="card">
       <h1>GenBI Football Match Analyst</h1>
       <p>
-        Ask questions about football match data powered by DuckDB and Gemma 4. You can query match trends, team performance, weekly patterns, and request charts when needed.
+        Ask questions about football match data powered by DuckDB and Gemma 4. Select a league first, then query match trends, team performance, weekly patterns, and request charts when needed.
       </p>
 
-      <label for="questionInput">Ask a football data question</label>
+      <label for="leagueSelect">1. Select a league</label>
+      <select id="leagueSelect" disabled>
+        <option>Loading leagues...</option>
+      </select>
+
+      <label for="questionInput">2. Ask a football data question</label>
       <input
         id="questionInput"
         type="text"
-        placeholder="Example: Which team scored the most goals last season?"
+        placeholder="Select a league first..."
+        disabled
       />
 
       <button id="runBtn">Run analysis</button>
@@ -233,14 +248,66 @@
 
   <script>
     const questionInput = document.getElementById("questionInput");
+    const leagueSelect = document.getElementById("leagueSelect");
     const runBtn = document.getElementById("runBtn");
     const statusEl = document.getElementById("status");
     const resultBox = document.getElementById("resultBox");
     const output = document.getElementById("output");
     const questionView = document.getElementById("questionView");
 
+    // Load leagues on page load
+    async function loadLeagues() {
+      try {
+        const response = await fetch("/api/leagues");
+        const rawText = await response.text();
+        let data;
+
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error(rawText || "Invalid server response");
+        }
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Failed to load leagues");
+        }
+
+        leagueSelect.innerHTML = '<option value="">-- Select a league --</option>';
+        data.leagues.forEach((league) => {
+          const option = document.createElement("option");
+          option.value = league;
+          option.textContent = league;
+          leagueSelect.appendChild(option);
+        });
+
+        leagueSelect.disabled = false;
+      } catch (error) {
+        leagueSelect.innerHTML = "<option>Failed to load leagues</option>";
+        statusEl.textContent = "Error loading leagues: " + error.message;
+        console.error("Leagues fetch failed:", error);
+      }
+    }
+
+    // Enable question input only after a league is selected
+    leagueSelect.addEventListener("change", () => {
+      const hasLeague = leagueSelect.value !== "";
+      questionInput.disabled = !hasLeague;
+      questionInput.placeholder = hasLeague
+        ? "Example: Which team scored the most goals last season?"
+        : "Select a league first...";
+      if (hasLeague) questionInput.focus();
+    });
+
+    loadLeagues();
+
     runBtn.addEventListener("click", async () => {
       const question = questionInput.value.trim();
+      const league = leagueSelect.value;
+
+      if (!league) {
+        statusEl.textContent = "Please select a league first.";
+        return;
+      }
 
       if (!question) {
         statusEl.textContent = "Please enter a question first.";
@@ -259,7 +326,7 @@
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ question })
+          body: JSON.stringify({ question, league })
         });
 
         const rawText = await response.text();
@@ -275,7 +342,7 @@
           throw new Error(data.detail || data.error || "Request failed");
         }
 
-        questionView.textContent = question;
+        questionView.textContent = `[${data.league || league}] ${question}`;
         output.textContent = data.result || data.answer || "No result returned.";
         resultBox.classList.remove("hidden");
         statusEl.textContent = "Done.";
