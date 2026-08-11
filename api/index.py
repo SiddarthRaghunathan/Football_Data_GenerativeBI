@@ -192,4 +192,98 @@ def ask(req: AskRequest):
     try:
         setup_db()
 
-        # Validate the selected league exists
+        # Validate the selected league exists (exact match)
+        con = duckdb.connect(DB_PATH, read_only=True)
+        valid = con.execute(
+            "SELECT DISTINCT League FROM matches WHERE League = ?",
+            [req.league],
+        ).fetchone()
+        con.close()
+
+        if not valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid league '{req.league}'. Select one from /api/leagues.",
+            )
+
+        agent = build_agent()
+
+        scoped_question = (
+            f"{req.question}\n\n"
+            f"IMPORTANT: You MUST filter every SQL query with WHERE League = '{valid[0]}'. "
+            f"Do not query any other league."
+        )
+
+        response = agent.run(scoped_question)
+        answer = getattr(response, "content", str(response))
+
+        return {
+            "question": req.question,
+            "league": valid[0],
+            "answer": str(answer),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ask/stream")
+def ask_stream(req: AskRequest):
+    try:
+        setup_db()
+
+        # Validate the selected league exists (exact match)
+        con = duckdb.connect(DB_PATH, read_only=True)
+        valid = con.execute(
+            "SELECT DISTINCT League FROM matches WHERE League = ?",
+            [req.league],
+        ).fetchone()
+        con.close()
+
+        if not valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid league '{req.league}'. Select one from /api/leagues.",
+            )
+
+        agent = build_agent()
+
+        scoped_question = (
+            f"{req.question}\n\n"
+            f"IMPORTANT: You MUST filter every SQL query with WHERE League = '{valid[0]}'. "
+            f"Do not query any other league."
+        )
+
+        # Stream with intermediate steps (tool calls, reasoning)
+        def event_generator():
+            try:
+                response_stream = agent.run(
+                    scoped_question,
+                    stream=True,
+                    stream_events=True,  # includes reasoning/tool calls
+                )
+                for event in response_stream:
+                    # Send each event as SSE
+                    payload = {
+                        "event": event.event.value if hasattr(event.event, "value") else str(event.event),
+                        "content": getattr(event, "content", None),
+                        "tool_calls": getattr(event, "tool_calls", None),
+                    }
+                    yield f"data: {json.dumps(payload)}\n\n"
+            except Exception as e:
+                error_payload = {"event": "error", "detail": str(e)}
+                yield f"data: {json.dumps(error_payload)}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
