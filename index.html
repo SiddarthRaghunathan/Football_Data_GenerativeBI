@@ -218,7 +218,7 @@
         <span>Attacking and card stats</span>
       </div>
 
-      <!-- Thinking panel (Agno-style) -->
+      <!-- Thinking panel (simple static log) -->
       <div id="thinkingBox" class="panel hidden" style="margin-top: 16px; border-left: 4px solid #0f766e;">
         <div class="panel-title">🤔 Thinking</div>
         <pre id="thinkingOutput"></pre>
@@ -1494,51 +1494,39 @@
       thinkingBox.classList.add("hidden");
       thinkingOutput.textContent = "";
 
-      // Use SSE streaming endpoint
-      const eventSource = new EventSource("/api/ask/stream", {
-        headers: { "Content-Type": "application/json" },
-      });
+      try {
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, league })
+        });
 
-      eventSource.onmessage = (evt) => {
-        const data = JSON.parse(evt.data);
+        const rawText = await response.text();
+        let data;
 
-        if (data.event === "error") {
-          statusEl.textContent = "Error: " + data.detail;
-          eventSource.close();
-          runBtn.disabled = false;
-          return;
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error(rawText || "Invalid server response");
         }
 
-        // Show "Thinking" for reasoning/tool events
-        if (["ReasoningStarted", "ReasoningStep", "ToolCallStarted", "ToolCallCompleted"].includes(data.event)) {
-          thinkingBox.classList.remove("hidden");
-          if (data.tool_calls) {
-            thinkingOutput.textContent += `🔧 ${data.tool_calls[0]?.name || "Tool"} called\n`;
-          }
-          if (data.content) {
-            thinkingOutput.textContent += data.content + "\n";
-          }
+        if (!response.ok) {
+          throw new Error(data.detail || data.error || "Request failed");
         }
 
-        // Stream final answer
-        if (data.event === "run_content" && data.content) {
-          output.textContent += data.content;
-          resultBox.classList.remove("hidden");
-        }
+        // Optional: show a simple "thinking" log
+        thinkingBox.classList.remove("hidden");
+        thinkingOutput.textContent = "✅ Query executed on DuckDB.\n";
 
-        if (data.event === "run_completed") {
-          questionView.textContent = `[${league}] ${question}`;
-          statusEl.textContent = "Done.";
-          eventSource.close();
-          runBtn.disabled = false;
-        }
-      };
-
-      eventSource.onerror = () => {
-        statusEl.textContent = "Connection lost.";
-        eventSource.close();
+        questionView.textContent = `[${data.league || league}] ${question}`;
+        output.textContent = data.answer || "No result returned.";
+        resultBox.classList.remove("hidden");
+        statusEl.textContent = "Done.";
+      } catch (error) {
+        statusEl.textContent = "Error: " + error.message;
+      } finally {
         runBtn.disabled = false;
-      };
+      }
     });
   </script>
 </body>
