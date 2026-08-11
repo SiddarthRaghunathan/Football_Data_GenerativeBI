@@ -42,7 +42,8 @@
       margin-bottom: 8px;
     }
 
-    input[type="text"] {
+    input[type="text"],
+    select {
       width: 100%;
       margin: 12px 0 16px;
       display: block;
@@ -51,6 +52,7 @@
       border-radius: 10px;
       font-size: 16px;
       box-sizing: border-box;
+      background: white;
     }
 
     button {
@@ -180,6 +182,11 @@
         Ask questions about football match data powered by DuckDB and Gemma 4. You can query match trends, team performance, weekly patterns, and request charts when needed.
       </p>
 
+      <label for="leagueSelect">Select a league</label>
+      <select id="leagueSelect" disabled>
+        <option>Loading leagues...</option>
+      </select>
+
       <label for="questionInput">Ask a football data question</label>
       <input
         id="questionInput"
@@ -233,17 +240,52 @@
 
   <script>
     const questionInput = document.getElementById("questionInput");
+    const leagueSelect = document.getElementById("leagueSelect");
     const runBtn = document.getElementById("runBtn");
     const statusEl = document.getElementById("status");
     const resultBox = document.getElementById("resultBox");
     const output = document.getElementById("output");
     const questionView = document.getElementById("questionView");
 
+    // Load leagues into the dropdown on page load
+    async function loadLeagues() {
+      try {
+        const response = await fetch("/api/leagues");
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Failed to load leagues");
+        }
+
+        leagueSelect.innerHTML = "";
+        data.leagues.forEach((league) => {
+          const option = document.createElement("option");
+          option.value = league;
+          option.textContent = league;
+          leagueSelect.appendChild(option);
+        });
+
+        // First league is pre-selected — user must always have exactly one league
+        leagueSelect.disabled = false;
+      } catch (error) {
+        leagueSelect.innerHTML = "<option>Failed to load leagues</option>";
+        statusEl.textContent = "Error loading leagues: " + error.message;
+      }
+    }
+
+    loadLeagues();
+
     runBtn.addEventListener("click", async () => {
       const question = questionInput.value.trim();
+      const league = leagueSelect.value;
 
       if (!question) {
         statusEl.textContent = "Please enter a question first.";
+        return;
+      }
+
+      if (!league || leagueSelect.disabled) {
+        statusEl.textContent = "Please select a league first.";
         return;
       }
 
@@ -259,7 +301,7 @@
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ question })
+          body: JSON.stringify({ question, league })
         });
 
         const rawText = await response.text();
@@ -275,7 +317,7 @@
           throw new Error(data.detail || data.error || "Request failed");
         }
 
-        questionView.textContent = question;
+        questionView.textContent = `[${data.league || league}] ${question}`;
         output.textContent = data.result || data.answer || "No result returned.";
         resultBox.classList.remove("hidden");
         statusEl.textContent = "Done.";
