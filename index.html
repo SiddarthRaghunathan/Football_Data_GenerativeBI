@@ -106,8 +106,8 @@
       white-space: pre-wrap;
       word-break: break-word;
       margin: 0;
-      font-size: 14px;
-      line-height: 1.5;
+      font-size: 13px;
+      line-height: 1.4;
     }
 
     .hidden {
@@ -218,10 +218,22 @@
         <span>Attacking and card stats</span>
       </div>
 
-      <!-- Thinking panel (simple static log) -->
+      <!-- Thinking panel -->
       <div id="thinkingBox" class="panel hidden" style="margin-top: 16px; border-left: 4px solid #0f766e;">
         <div class="panel-title">🤔 Thinking</div>
         <pre id="thinkingOutput"></pre>
+      </div>
+
+      <!-- Tool calls panel -->
+      <div id="toolsBox" class="panel hidden" style="margin-top: 16px; border-left: 4px solid #0f766e;">
+        <div class="panel-title">🔧 Tool Calls</div>
+        <pre id="toolsOutput"></pre>
+      </div>
+
+      <!-- Messages panel -->
+      <div id="messagesBox" class="panel hidden" style="margin-top: 16px; border-left: 4px solid #6b7280;">
+        <div class="panel-title">💬 Messages</div>
+        <pre id="messagesOutput"></pre>
       </div>
 
       <div id="resultBox" class="result hidden">
@@ -269,6 +281,10 @@
     const questionView = document.getElementById("questionView");
     const thinkingBox = document.getElementById("thinkingBox");
     const thinkingOutput = document.getElementById("thinkingOutput");
+    const toolsBox = document.getElementById("toolsBox");
+    const toolsOutput = document.getElementById("toolsOutput");
+    const messagesBox = document.getElementById("messagesBox");
+    const messagesOutput = document.getElementById("messagesOutput");
 
     // Hardcoded league list — top 20 by popularity first, then alphabetical
     const validLeagues = [
@@ -1492,7 +1508,11 @@
       output.textContent = "";
       questionView.textContent = "";
       thinkingBox.classList.add("hidden");
+      toolsBox.classList.add("hidden");
+      messagesBox.classList.add("hidden");
       thinkingOutput.textContent = "";
+      toolsOutput.textContent = "";
+      messagesOutput.textContent = "";
 
       try {
         const response = await fetch("/api/ask", {
@@ -1514,10 +1534,29 @@
           throw new Error(data.detail || data.error || "Request failed");
         }
 
-        // Optional: show a simple "thinking" log
-        thinkingBox.classList.remove("hidden");
-        thinkingOutput.textContent = "✅ Query executed on DuckDB.\n";
+        // Thinking
+        if (data.thinking) {
+          thinkingBox.classList.remove("hidden");
+          thinkingOutput.textContent = data.thinking;
+        }
 
+        // Tool calls
+        if (data.tool_calls && data.tool_calls.length) {
+          toolsBox.classList.remove("hidden");
+          toolsOutput.textContent = data.tool_calls
+            .map((tc, i) => `${i + 1}. ${tc.name}\n   Args: ${JSON.stringify(tc.args)}\n   Result: ${tc.result}`)
+            .join("\n\n");
+        }
+
+        // Messages
+        if (data.messages && data.messages.length) {
+          messagesBox.classList.remove("hidden");
+          messagesOutput.textContent = data.messages
+            .map((m) => `[${m.role}] ${m.content}`)
+            .join("\n\n");
+        }
+
+        // Final answer
         questionView.textContent = `[${data.league || league}] ${question}`;
         output.textContent = data.answer || "No result returned.";
         resultBox.classList.remove("hidden");
