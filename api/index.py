@@ -190,7 +190,6 @@ def ask(req: AskRequest):
     try:
         setup_db()
 
-        # Validate the selected league exists (exact match)
         con = duckdb.connect(DB_PATH, read_only=True)
         valid = con.execute(
             "SELECT DISTINCT League FROM matches WHERE League = ?",
@@ -213,12 +212,39 @@ def ask(req: AskRequest):
         )
 
         response = agent.run(scoped_question)
-        answer = getattr(response, "content", str(response))
+
+        # Final answer
+        answer = getattr(response, "content", "") or ""
+
+        # Thinking / reasoning (model-dependent; often empty for Gemini/Gemma)
+        thinking = getattr(response, "reasoning_content", "") or ""
+
+        # Tool calls — serialize to plain dicts
+        tool_calls = []
+        for tc in (getattr(response, "tool_calls", None) or []):
+            tool_calls.append({
+                "name": getattr(tc, "tool_name", None) or getattr(tc, "name", "tool"),
+                "args": getattr(tc, "tool_args", None) or getattr(tc, "arguments", {}),
+                "result": str(getattr(tc, "result", ""))[:2000],
+            })
+
+        # Messages — role + content only, skip system prompt
+        messages = []
+        for m in (getattr(response, "messages", None) or []):
+            role = getattr(m, "role", None)
+            if role in ("user", "assistant", "tool"):
+                messages.append({
+                    "role": role,
+                    "content": str(getattr(m, "content", "") or "")[:3000],
+                })
 
         return {
             "question": req.question,
             "league": valid[0],
             "answer": str(answer),
+            "thinking": thinking,
+            "tool_calls": tool_calls,
+            "messages": messages,
         }
     except HTTPException:
         raise
