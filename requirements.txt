@@ -1,7 +1,8 @@
 fastapi
+uvicorn[standard]
 pydantic
-duckdb
 pandas
-matplotlib
+duckdb
 agno
 google-genai
+matplotlib
