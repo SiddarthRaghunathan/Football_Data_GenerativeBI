@@ -233,7 +233,7 @@
 
       <!-- Messages panel -->
       <div id="messagesBox" class="panel hidden" style="margin-top: 16px; border-left: 4px solid #6b7280;">
-        <div class="panel-title">💬 Thinking</div>
+        <div class="panel-title">💬 Agent messages</div>
         <pre id="messagesOutput"></pre>
       </div>
 
@@ -1489,46 +1489,6 @@
       if (isValid) questionInput.focus();
     });
 
-    // Helper: calls /api/ask with up to 10 attempts
-    async function askQuestion(question, league) {
-      const maxAttempts = 10;
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          const response = await fetch("/api/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ question, league })
-          });
-
-          const rawText = await response.text();
-          let data;
-
-          try {
-            data = JSON.parse(rawText);
-          } catch {
-            throw new Error(rawText || "Invalid server response");
-          }
-
-          if (!response.ok) {
-            throw new Error(data.detail || data.error || `Request failed with status ${response.status}`);
-          }
-
-          return data;
-
-        } catch (error) {
-          console.error(`Attempt ${attempt}/${maxAttempts} failed:`, error);
-
-          if (attempt === maxAttempts) {
-            throw error;
-          }
-
-          // Backoff: 2s, 4s, 6s, 8s, 10s, 12s, 14s, 16s, 18s
-          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-        }
-      }
-    }
-
     runBtn.addEventListener("click", async () => {
       const question = questionInput.value.trim();
       const league = leagueInput.value.trim();
@@ -1572,7 +1532,7 @@
             .join("\n\n");
         }
 
-        // Messages
+        // Agent messages — user and assistant only; tool output is excluded by the API
         if (data.messages && data.messages.length) {
           messagesBox.classList.remove("hidden");
           messagesOutput.textContent = data.messages
