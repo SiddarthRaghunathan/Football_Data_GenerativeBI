@@ -211,7 +211,37 @@ def ask(req: AskRequest):
             f"Do not query any other league."
         )
 
-        response = agent.run(scoped_question)
+        max_attempts = 10
+        response = None
+        last_error = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = agent.run(scoped_question)
+                break
+
+            except Exception as e:
+                last_error = e
+                error_text = str(e).lower()
+
+                # Retry only likely transient model/API failures
+                retryable = any(
+                    token in error_text
+                    for token in ("500", "503", "internal", "overloaded", "unavailable", "timeout")
+                )
+
+                print(f"Gemini attempt {attempt}/{max_attempts} failed: {e}")
+
+                if not retryable or attempt == max_attempts:
+                    raise
+
+                time.sleep(2 * attempt)  # 2s, 4s, 6s, ... up to 18s
+
+        if response is None:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gemini failed after {max_attempts} attempts: {last_error}",
+            )
 
         # Final answer
         answer = getattr(response, "content", "") or ""
