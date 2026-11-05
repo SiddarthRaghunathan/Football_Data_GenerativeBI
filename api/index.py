@@ -1,7 +1,9 @@
 import os
+import time
+import json
 from functools import lru_cache
 from pathlib import Path
-import time
+
 import duckdb
 import pandas as pd
 import matplotlib
@@ -213,11 +215,31 @@ def ask(req: AskRequest):
 
         max_attempts = 10
         response = None
+        raw_answer = ""
         last_error = None
 
         for attempt in range(1, max_attempts + 1):
             try:
                 response = agent.run(scoped_question)
+
+                raw_answer = getattr(response, "content", "") or ""
+
+                # Agno can return a Google API error as response content
+                if isinstance(raw_answer, str) and raw_answer.lstrip().startswith("{"):
+                    try:
+                        parsed = json.loads(raw_answer)
+
+                        if isinstance(parsed, dict) and "error" in parsed:
+                            error = parsed["error"]
+                            code = error.get("code", 500)
+                            message = error.get("message", "Unknown model error")
+
+                            raise RuntimeError(
+                                f"Gemini API error {code}: {message}"
+                            )
+                    except json.JSONDecodeError:
+                        pass
+
                 break
 
             except Exception as e:
@@ -227,7 +249,10 @@ def ask(req: AskRequest):
                 # Retry only likely transient model/API failures
                 retryable = any(
                     token in error_text
-                    for token in ("500", "503", "internal", "overloaded", "unavailable", "timeout")
+                    for token in (
+                        "500", "503", "internal", "overloaded",
+                        "unavailable", "timeout"
+                    )
                 )
 
                 print(f"Gemini attempt {attempt}/{max_attempts} failed: {e}")
@@ -244,7 +269,7 @@ def ask(req: AskRequest):
             )
 
         # Final answer
-        answer = getattr(response, "content", "") or ""
+        answer = raw_answer
 
         # Thinking / reasoning (model-dependent; often empty for Gemini/Gemma)
         thinking = getattr(response, "reasoning_content", "") or ""
@@ -258,15 +283,19 @@ def ask(req: AskRequest):
                 "result": str(getattr(tc, "result", ""))[:2000],
             })
 
-        # Messages — role + content only, skip system prompt
+        # Messages — user and assistant only; exclude tool/schema/query output
         messages = []
         for m in (getattr(response, "messages", None) or []):
             role = getattr(m, "role", None)
-            if role in ("user", "assistant", "tool"):
-                messages.append({
-                    "role": role,
-                    "content": str(getattr(m, "content", "") or "")[:3000],
-                })
+
+            if role in ("user", "assistant"):
+                content = str(getattr(m, "content", "") or "").strip()
+
+                if content:
+                    messages.append({
+                        "role": role,
+                        "content": content[:3000],
+                    })
 
         return {
             "question": req.question,
@@ -276,6 +305,7 @@ def ask(req: AskRequest):
             "tool_calls": tool_calls,
             "messages": messages,
         }
+
     except HTTPException:
         raise
     except Exception as e:
