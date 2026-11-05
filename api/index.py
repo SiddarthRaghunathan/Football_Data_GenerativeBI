@@ -24,7 +24,7 @@ CHART_DIR = Path("/tmp/charts")
 CHART_DIR.mkdir(parents=True, exist_ok=True)
 
 SHEET_ID = "1Op6IKbc0IICuQCiRYjf94MGxXfDiE-IxGcL_lGfDw4c"
-GID = "0"
+GID = "558349001"
 
 semantic_context = """
 model: football_matches
