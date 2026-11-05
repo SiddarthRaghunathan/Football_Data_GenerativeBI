@@ -1523,7 +1523,6 @@
             throw error;
           }
 
-          // Backoff: 2s, 4s, 6s, 8s, 10s, 12s, 14s, 16s, 18s
           await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
         }
       }
