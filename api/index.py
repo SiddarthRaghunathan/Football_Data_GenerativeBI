@@ -136,7 +136,7 @@ def build_agent():
 
     agent = Agent(
         name="FootballMatchAnalyst",
-        model=Gemini(id="gemma-4-31b-it"),
+        model=Gemini(id="gemma-4-26b-a4b-it"),
         tools=[
             DuckDbTools(db_path=db_info["db_path"], read_only=True),
             ChartToolkit(),
